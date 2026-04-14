@@ -1,0 +1,88 @@
+# CDK9/CyclinT1 holo condition — Phase 1 weighted ensemble
+#
+# CDK9 (chain A) + CyclinT1 (chain B), T3E inhibitor removed.
+# Explores CDK9 αC-helix dynamics in the presence of CyclinT1 (P-TEFb complex).
+#
+# Run from the deepdrivewe repo root:
+#   python examples/openmm_cdk9_cyclinT1/main.py \
+#       --config examples/openmm_cdk9_cyclinT1/config_holo_cyclinT1.yaml
+
+# --- Output ---
+output_dir: runs/cdk9-holo-cyclinT1
+
+# --- Iteration control ---
+num_iterations: 100
+max_retries: 2
+
+# --- Basis states ---
+basis_states:
+  basis_state_dir: examples/openmm_cdk9_cyclinT1/inputs/holo_cyclinT1
+  basis_state_ext: ".pdb"
+  initial_ensemble_members: 40
+  randomly_initialize: true
+  random_seed: 42
+
+# --- Basis state pcoord initializer ---
+# Glu66/Lys48 are on CDK9 chain A in both apo and holo conditions.
+basis_state_initializer:
+  reference_file: examples/openmm_cdk9_cyclinT1/inputs/holo_cyclinT1/basis_000.pdb
+  mda_selection: "protein and name CA"
+  chain: "A"
+  glu66_resnum: 66
+  lys48_resnum: 48
+
+# --- 2D binner ---
+rmsd_bin_edges:
+  - 0.0
+  - 1.0
+  - 2.0
+  - 3.0
+  - 4.0
+  - 5.0
+  - 6.0
+  - .inf
+salt_bridge_bin_edges:
+  - 0.0
+  - 2.0
+  - 4.0
+  - 6.0
+  - 8.0
+  - 10.0
+  - 12.0
+  - 14.0
+  - 16.0
+  - 18.0
+  - 20.0
+  - .inf
+sims_per_bin: 4
+
+# --- Resampler ---
+max_allowed_weight: 0.25
+min_allowed_weight: 1.0e-40
+
+# --- Recycler ---
+rmsd_boundary_ang: 6.0
+
+# --- OpenMM simulation segment ---
+# Note: holo system is ~4700 atoms (vs ~2600 for apo) — allow more memory.
+simulation_config:
+  simulation_length_ns: 0.05
+  report_interval_ps: 10.0
+  dt_ps: 0.002
+  temperature_kelvin: 300.0
+  heat_bath_friction_coef: 1.0
+  solvent_type: implicit
+  run_minimization: false
+  set_positions: true
+  randomize_velocities: true
+  hardware_platform: CUDA
+
+# --- Reference and contact map settings ---
+reference_file: examples/openmm_cdk9_cyclinT1/inputs/holo_cyclinT1/basis_000.pdb
+cutoff_angstrom: 8.0
+mda_selection: "protein and name CA"
+openmm_selection:
+  - "CA"
+
+# --- Workers ---
+num_workers: 4

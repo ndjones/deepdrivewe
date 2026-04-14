@@ -1,0 +1,20 @@
+# Downloaded source PDB
+raw/
+
+# Intermediate structures (large, regenerable)
+**/cdk9_*_clean.pdb
+**/cdk9_*_pre_minimised.pdb
+**/cdk9_*_minimised.pdb
+
+# Trajectory files
+*.dcd
+*.xtc
+*.trr
+*.nc
+
+# OpenMM checkpoint files
+*.chk
+*.xml
+
+# Basis state snapshots are committed — do NOT ignore basis_*.pdb
+# They are the primary output of this pipeline and must be versioned.
