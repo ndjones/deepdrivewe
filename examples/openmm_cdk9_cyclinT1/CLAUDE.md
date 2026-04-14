@@ -1,251 +1,358 @@
-# CLAUDE.md — CDK9/CyclinT1 Phase 1 Weighted Ensemble
+# CLAUDE.md — CDK9 / CyclinT1 Phase 1 Weighted Ensemble
 
 > **For AI coding assistants (Claude Code, Cursor, Copilot, etc.)**
-> This file captures the full context of the CDK9 example — biology,
-> architecture, decisions, current status, and how to continue development.
-> Read this before reading any code.
+>
+> This is the single reference document for this example.  Read it before
+> touching any code.  It covers the biology, the deepdrivewe architecture,
+> every design decision made, the phased roadmap, and explicit instructions
+> for how to continue AI-assisted development on this codebase.
 
 ---
 
-## Biological context
+## 1. What this example is
 
-**Target system:** CDK9 / CyclinT1 (P-TEFb transcription complex)
+A complete, self-contained weighted ensemble (WE) simulation example for
+mapping the CDK9 / CyclinT1 conformational landscape.  It lives at:
+
+```
+deepdrivewe/examples/openmm_cdk9_cyclinT1/
+```
+
+It is built on the **deepdrivewe + Academy agents** framework and follows the
+same pattern as `examples/openmm_ntl9_hk_academy/`, extended with a 2D
+geometric progress coordinate tailored to CDK9 biology.
+
+See `ROADMAP.md` in this directory for the full phased plan.
+
+---
+
+## 2. Biological context
+
+**Target:** CDK9 (Ser/Thr kinase) / CyclinT1 (activating partner) — the
+P-TEFb transcription elongation complex.  CDK9 is a cancer and antiviral drug
+target.
+
 **Source structure:** PDB 4BCI — CDK9 (chain A) + CyclinT1 (chain B) +
-  T3E inhibitor, resolved at 3.10 Å by X-ray crystallography.
+T3E inhibitor, 3.10 Å resolution.
 
-**Scientific question:** Does CyclinT1 shift the CDK9 conformational
-ensemble — specifically, does it lock the αC-helix in the active (αC-in)
-state, or does CDK9 still sample αC-out conformations in the complex?
+**Scientific question:** Does CyclinT1 shift CDK9's conformational ensemble
+— specifically, does it lock the αC-helix in the active (αC-in) state?
 
-**Two conditions:**
+| Condition | What runs | Expected |
+|-----------|----------|---------|
+| `apo` | CDK9 alone (chain A) | Free αC-helix mobility: both αC-in and αC-out sampled |
+| `holo_cyclinT1` | CDK9 + CyclinT1 (chains A+B) | CyclinT1 stabilises αC-in |
 
-| Condition | What's simulated | Expected behaviour |
-|-----------|-----------------|-------------------|
-| `apo` | CDK9 alone (chain A) | Free αC-helix mobility; both αC-in and αC-out accessible |
-| `holo_cyclinT1` | CDK9 + CyclinT1 (chains A+B) | CyclinT1 expected to stabilise αC-in |
-
-**T3E inhibitor:** removed from both conditions.
-**Phospho-Thr186 (TPO):** retained — CDK9 is active (T-loop phosphorylated).
-Requires AMBER ff14SB + PHOSAA10 force field parameters.
-
-**CyclinT1 mutations Q77R/E96G/F241L:** all distal from CDK9 interface
-(13.4 / 6.7 / 28.9 Å respectively).  Accepted as-is for Phase 1.
-See `inputs/02_check_mutations.py` for the analysis.
+**Key structural notes:**
+- T3E inhibitor removed from both conditions (we study the unliganded landscape).
+- Phospho-Thr186 (TPO) retained — active CDK9 is Thr186-phosphorylated.
+  Requires AMBER ff14SB + PHOSAA10 force field parameters.
+- CyclinT1 mutations Q77R/E96G/F241L: all distal (13.4/6.7/28.9 Å from CDK9
+  interface); accepted as-is for Phase 1 (see `inputs/02_check_mutations.py`).
+- PDB 4BCI has duplicate chain IDs (A, B, A, B) — second pair is HETATM.
+  Chain removal uses index-based logic in `inputs/01_download_and_clean.py`.
 
 ---
 
-## Progress coordinates (pcoord)
+## 3. Progress coordinates
 
 | Index | Observable | Range | Biology |
 |-------|-----------|-------|---------|
 | `pcoord[0]` | CDK9 Cα RMSD to reference (Å) | 0–6 Å (recycled above) | Global structural drift / unfolding guard |
-| `pcoord[1]` | Glu66 Cδ – Lys48 Nζ distance (Å) | 3–20+ Å | αC-helix salt-bridge: ~3.5 Å = αC-in (active), >8 Å = αC-out (inactive) |
+| `pcoord[1]` | Glu66 Cδ – Lys48 Nζ distance (Å) | 3–20+ Å | αC-helix salt-bridge: ~3.5 Å = αC-in (active), >8 Å = αC-out |
 
-**Residue numbering** uses PDB 4BCI canonical CDK9 numbering (UniProt P50750).
+Residue numbering follows PDB 4BCI / UniProt P50750.
 Verify with `inputs/04_verify_pcoord_residues.py` before running.
 
 ---
 
-## Architecture
+## 4. deepdrivewe architecture (what you need to know)
 
-This example subclasses four deepdrivewe extension points:
+deepdrivewe provides the WE framework.  This example subclasses four extension
+points; everything else is inherited unchanged.
+
+### 4.1 Package layout
 
 ```
-deepdrivewe base class              CDK9 subclass (this example)
-─────────────────────               ────────────────────────────
-ContactMapRMSDReporter     →    CDK9PcoordReporter    (simulate.py)
-  adds salt-bridge distance; returns (n_frames, 2)
-
-SimulationAgent            →    CDK9SimulationAgent   (simulate.py)
-  injects CDK9PcoordReporter instead of ContactMapRMSDReporter
-
-Recycler                   →    BoundaryRecycler      (recyclers.py)
-  recycles walkers with pcoord[0] > rmsd_threshold (default 6 Å)
-
-OrchestratorAgent          →    CDK9OrchestratorAgent (orchestrator.py)
-  overrides evaluate_goals() with αC-in fraction logging
-
-New class (no deepdrivewe base):
-  Rectilinear2DBinner                                  (binners.py)
-  2D uniform grid over (RMSD, salt-bridge distance)
+deepdrivewe/deepdrivewe/          ← Python package (importable)
+├── api.py                        SimMetadata, BasisStates, TargetState
+├── academy_agents/
+│   ├── orchestrator.py           OrchestratorAgent — workflow loop
+│   ├── ensemble.py               EnsembleManagerAgent — binner/resampler/recycler
+│   ├── simulation.py             SimulationAgent — runs one OpenMM segment
+│   └── config.py                 SimulationPoolConfig, AcademyWorkflowConfig
+├── simulation/
+│   └── openmm.py                 OpenMMConfig, OpenMMSimulation,
+│                                 ContactMapRMSDReporter
+├── binners/
+│   └── rectilinear.py            RectilinearBinner (1D only)
+├── recyclers/
+│   └── base.py                   Recycler ABC + recycle_simulations()
+└── resamplers/                   HuberKimResampler
 ```
 
-Entry point: `main.py` — wires everything and calls `asyncio.run(run_academy_workflow(cfg))`.
+### 4.2 CDK9 subclasses (this example)
+
+```
+ContactMapRMSDReporter → CDK9PcoordReporter    (simulate.py)
+SimulationAgent        → CDK9SimulationAgent   (simulate.py)
+Recycler               → BoundaryRecycler      (recyclers.py)
+Binner (new)           → Rectilinear2DBinner   (binners.py)
+OrchestratorAgent      → CDK9OrchestratorAgent (orchestrator.py)
+```
+
+### 4.3 Key data flow
+
+```
+CDK9SimulationAgent.run_simulation()
+  → CDK9PcoordReporter.report() on every frame
+      → parent accumulates contact maps (for Phase 2 CVAE)
+      → child accumulates salt-bridge distance
+  → CDK9PcoordReporter.get_rmsds() → (n_frames, 2) array
+  → stored in SimMetadata.pcoord (list[list[float]])
+
+EnsembleManagerAgent.apply_resampling()
+  → Rectilinear2DBinner.assign_bins(pcoords)
+      pcoords[:, 0] = last-frame RMSD per walker
+      pcoords[:, 1] = last-frame salt-bridge dist per walker
+  → BoundaryRecycler.recycle(pcoords) → indices where RMSD > threshold
+  → HuberKimResampler merges/splits walkers within each bin
+```
+
+### 4.4 pcoord conventions
+
+- `SimMetadata.pcoord` shape: `(n_frames, n_dims)` — stored as list of lists.
+- `ContactMapRMSDReporter.get_rmsds()` returns `(n_frames, 1)` by default.
+- `CDK9PcoordReporter.get_rmsds()` returns `(n_frames, 2)`.
+- Recycler and binner receive `pcoords[-1]` — last frame of each walker.
+
+### 4.5 Academy agent framework
+
+Academy uses async Python with four key primitives:
+
+```python
+from academy.agent import action, loop
+from academy.handle import Handle
+from academy.manager import Manager
+from academy.exchange import LocalExchangeFactory
+
+# @action  — callable remotely via Handle.method_name(args)
+# @loop    — runs in background until shutdown event is set
+# Manager  — launches agents, creates handles
+# Handle   — typed proxy to a remote agent
+```
+
+Agents communicate via handles only (no direct calls).  The `@action`
+decorator must be preserved on overridden methods or the framework won't
+register them.
 
 ---
 
-## Phase roadmap
-
-### Phase 1 — Geometric pcoord (THIS EXAMPLE, `feature/phase1-geometric-pcoord`)
-**Status: code complete, awaiting HPC execution.**
-
-- 2D pcoord: Cα RMSD + Glu66–Lys48 salt-bridge distance
-- Uniform 2D RectilinearBinner (7 × 11 = 77 bins)
-- BoundaryRecycler: RMSD > 6 Å → recycle to basis state
-- HuberKim resampler (walkers merge/split per bin)
-- Independent apo and holo_cyclinT1 runs
-- Implicit solvent (GBn2) for portability
-
-**Deliverable:** 2D probability flux maps over (RMSD, salt-bridge) for
-apo vs holo; qualitative answer to whether CyclinT1 shifts the pcoord[1]
-distribution.
-
-### Phase 2 — CVAE latent pcoord (`feature/phase2-cvae-pcoord`, future)
-
-- Replace geometric pcoord[1] with a CVAE latent coordinate
-- Contact maps are already being collected (see `CDK9PcoordReporter`)
-  so Phase 1 trajectories can seed Phase 2 training
-- Voronoi binner in latent space
-- Requires `deepdrivewe.academy_agents.training.TrainingAgent`
-
-### Phase 3 — Comparative orchestration (`feature/phase3-comparative`, future)
-
-- Coupled apo + holo ensembles in a single workflow
-- Comparative probability flux analysis
-- Reward-based allocation toward distinguishing regions
-
----
-
-## Key design decisions
+## 5. Design decisions and rationale
 
 ### Why 2D pcoord instead of 1D?
+pcoord[0] (RMSD) is a *safety guard*, not a sampling coordinate.  Without it,
+a 1D binner over salt-bridge distance alone would keep walkers in biologically
+meaningless unfolded states.  The two dimensions are complementary, not
+redundant.
 
-pcoord[0] (RMSD) is a *safety guard*, not a meaningful sampling coordinate.
-It prevents walkers from drifting into globally unfolded states.  Without it,
-a 1D salt-bridge binner would happily place walkers in bins where CDK9 has
-unfolded — biologically meaningless and computationally wasteful.
-
-The two dimensions are not independent: high RMSD tends to correlate with
-large salt-bridge distance, but not always.  The 2D grid captures this.
-
-### Why BoundaryRecycler (not LowRecycler)?
-
+### Why BoundaryRecycler, not LowRecycler?
 `LowRecycler` (deepdrivewe built-in) recycles walkers that fall *below* a
-threshold — i.e., walkers that reach a target state.  CDK9 Phase 1 has no
-target state: the goal is to *map* the landscape, not funnel toward a specific
-conformation.  `BoundaryRecycler` recycles walkers that stray too *far*, which
-prevents unfolding without biasing toward any conformation.
+threshold — i.e., walkers reaching a target state.  CDK9 Phase 1 has no target
+state; the goal is to *map* the landscape.  `BoundaryRecycler` recycles walkers
+that stray too *far* (RMSD > 6 Å), preventing unfolding without biasing toward
+any specific conformation.
 
 ### Why implicit solvent (GBn2)?
+Portability: no periodic box, no pressure coupling, no water equilibration.
+Adequate for mapping which states exist and their rough probabilities.  Phase
+2/3 should consider explicit solvent for quantitative rate estimates.
 
-Portability across compute environments: no periodic box, no pressure
-coupling, no water equilibration.  Adequate for mapping which conformational
-states exist and their rough relative probabilities.  Phase 2/3 should consider
-explicit solvent for quantitative rate estimates.
+### Why collect contact maps in Phase 1 if they're unused?
+`CDK9PcoordReporter` inherits contact-map collection from the parent.  Phase 2
+CVAE training needs contact maps, and Phase 1 trajectories will seed Phase 2.
+Re-running simulations is expensive; collect now, use later.
 
-### Why collect contact maps in Phase 1?
-
-`CDK9PcoordReporter` inherits contact-map collection from
-`ContactMapRMSDReporter` even though contact maps are not used in Phase 1.
-This is deliberate: re-running simulations is expensive.  Phase 2 CVAE training
-needs contact maps, and Phase 1 trajectories will seed Phase 2.
-
-### Why not modify LowRecycler / RectilinearBinner directly?
-
-We do not modify upstream deepdrivewe classes because:
-1. This repo is a reference/dependency; upstream changes would be breaking.
-2. Subclassing keeps the CDK9 code self-contained in this example directory.
-3. Future contributors can replace CDK9 classes without touching deepdrivewe.
+### Why subclass instead of modifying deepdrivewe base classes?
+deepdrivewe is a reference library; upstream modifications are breaking changes
+for all other examples.  CDK9 code is self-contained in this directory and can
+be replaced/extended without touching deepdrivewe.
 
 ---
 
-## How to continue development with an AI assistant
+## 6. Example layout
 
-### Recommended startup prompt
+```
+examples/openmm_cdk9_cyclinT1/
+├── CLAUDE.md                      ← This file (AI assistant guide)
+├── README.md                      ← Human-readable overview and quickstart
+├── ROADMAP.md                     ← Full phased plan, decisions, open questions
+├── main.py                        ← Entry point; wires Academy agents
+├── simulate.py                    ← CDK9PcoordReporter + CDK9SimulationAgent
+├── recyclers.py                   ← BoundaryRecycler
+├── binners.py                     ← Rectilinear2DBinner (2D uniform grid)
+├── orchestrator.py                ← CDK9OrchestratorAgent
+├── config_apo.yaml                ← Full config for apo condition
+├── config_holo_cyclinT1.yaml      ← Full config for holo condition
+├── inputs/
+│   ├── README.md                  ← Pipeline docs + structural decisions table
+│   ├── 01_download_and_clean.py   ← Download 4BCI, prepare apo/holo PDBs
+│   ├── 02_check_mutations.py      ← CyclinT1 mutation proximity analysis
+│   ├── 03_equilibrate.py          ← Minimise + 2 ns NVT + save basis states
+│   ├── 04_verify_pcoord_residues.py ← Verify Glu66/Lys48 numbering
+│   └── .gitignore
+└── scripts/
+    ├── README.md                  ← HPC submission guide
+    ├── hpc_equilibrate.sl         ← Slurm: structure equilibration
+    ├── hpc_we_apo.sl              ← Slurm: CDK9 apo WE run
+    └── hpc_we_holo.sl             ← Slurm: holo WE run
+```
 
-When starting a new session on this codebase, give the AI this context:
+---
 
-> "I'm working on the CDK9/CyclinT1 Phase 1 weighted ensemble example in
-> deepdrivewe (`examples/openmm_cdk9_cyclinT1/`).  The example is on the
-> `feature/academy-agents` branch.  Read `examples/openmm_cdk9_cyclinT1/CLAUDE.md`
-> and `CLAUDE.md` (repo root) first, then read `simulate.py` and `main.py`
-> before making any changes.  The task is: [your task here]."
+## 7. Running the example
 
-### Before making changes
+### Prerequisites
 
-1. Read `simulate.py` — most pcoord changes start here.
-2. Read `main.py` — to understand how components wire together.
-3. Check `inputs/04_verify_pcoord_residues.py` output — residue numbers
-   in the structure may differ from defaults.
+```bash
+# From deepdrivewe repo root
+pip install -e .                       # install deepdrivewe + dependencies
+# openmm via conda-forge if not present:
+# conda install -c conda-forge openmm pdbfixer
+```
 
-### Common tasks
+### Step 1 — Prepare structures
 
-**Add a 3rd pcoord dimension (e.g. DFG loop angle):**
-1. Extend `CDK9PcoordReporter.report()` — append to `self._pcoord3`.
+```bash
+cd examples/openmm_cdk9_cyclinT1/inputs
+python 01_download_and_clean.py          # ~1 min
+python 02_check_mutations.py             # informational
+python 03_equilibrate.py                 # ~3-5 h CPU; use HPC for GPU
+python 04_verify_pcoord_residues.py      # verify Glu66/Lys48
+```
+
+Or on HPC: `sbatch scripts/hpc_equilibrate.sl` (from within this directory).
+
+### Step 2 — Run the workflow
+
+```bash
+# From this directory (examples/openmm_cdk9_cyclinT1/):
+export OPENMM_CPU_THREADS=1    # CPU only; remove for GPU
+
+python main.py --config config_apo.yaml
+python main.py --config config_holo_cyclinT1.yaml
+```
+
+On HPC: `sbatch scripts/hpc_we_apo.sl` / `sbatch scripts/hpc_we_holo.sl`.
+
+### Step 3 — Resume from checkpoint
+
+Re-run the same command.  `EnsembleCheckpointer` loads the latest checkpoint
+automatically.
+
+---
+
+## 8. Common tasks for AI assistants
+
+### Changing the recycling threshold
+Edit `rmsd_boundary_ang` in the YAML config.  No code change needed.
+
+### Adding a 3rd pcoord dimension
+1. Extend `CDK9PcoordReporter.report()` in `simulate.py` — append to a
+   new `self._pcoord3` list.
 2. Update `get_rmsds()` to return `np.column_stack([rmsd, sb, dim3])`.
-3. Replace `Rectilinear2DBinner` with a 3D binner or use `pcoord_idx=0`
-   for the existing 1D binner.
+3. Replace `Rectilinear2DBinner` with a 3D variant or use the 1D
+   `RectilinearBinner` on a single dimension.
 
-**Change the recycling threshold:**
-Edit `rmsd_boundary_ang` in `config_apo.yaml` / `config_holo_cyclinT1.yaml`.
-No code change needed.
-
-**Switch from implicit to explicit solvent:**
-1. Change `solvent_type: explicit` in the YAML.
+### Switching to explicit solvent
+1. Set `solvent_type: explicit` in the YAML.
 2. Add a `top_file` path (AMBER .prmtop).
-3. Change `hardware_platform: CUDA` (explicit solvent needs GPU).
+3. Set `hardware_platform: CUDA`.
 
-**Add Phase 2 CVAE analysis:**
-1. Subclass `AnalysisPoolAgent` with a CVAE trainer.
-2. Contact maps are already in `SimResult.data['contact_maps']`.
+### Adding Phase 2 CVAE analysis
+1. Contact maps are already in `SimResult.data['contact_maps']`.
+2. Subclass `AnalysisPoolAgent` with a CVAE trainer.
 3. Replace `Rectilinear2DBinner` with a Voronoi binner over latent space.
 
+### Verifying the example runs end-to-end (CPU smoke test)
+
+```bash
+# Edit config_apo.yaml temporarily:
+#   num_iterations: 2
+#   num_workers: 1
+#   simulation_config.hardware_platform: CPU
+#   simulation_config.simulation_length_ns: 0.001
+export OPENMM_CPU_THREADS=1
+python main.py --config config_apo.yaml
+```
+
 ---
 
-## Known issues and open questions
+## 9. Known issues and open questions
 
-- **Residue numbering:** Glu66/Lys48 numbers assume 4BCI PDB canonical
-  numbering is preserved through PDBFixer.  Always verify with
+- **Residue numbering:** Glu66/Lys48 assume 4BCI canonical CDK9 numbering
+  is preserved through PDBFixer.  Always verify with
   `inputs/04_verify_pcoord_residues.py` on a fresh structure.
 
-- **holo system size:** ~4,700 atoms (vs ~2,600 for apo).  Budget memory
+- **holo system size:** ~4,700 atoms vs ~2,600 for apo.  Budget memory
   accordingly when setting `num_workers`.
 
-- **Implicit solvent drift:** GBn2 can cause unphysical loop extension in
-  long segments.  The 6 Å RMSD boundary is conservative; reduce to 4 Å if
-  you see frequent recycling.
+- **GBn2 loop drift:** Implicit solvent can cause unphysical loop extension
+  in long segments.  Reduce `rmsd_boundary_ang` to 4 Å if frequent recycling
+  is observed.
 
-- **Contact map shape mismatch:** apo (321 residues) and holo (573 residues)
-  produce different contact map sizes.  Do not train a single CVAE on both
-  conditions without alignment/padding.
+- **Contact map shape mismatch:** apo and holo produce different contact map
+  sizes (321 vs 573 residues).  Do not train a single CVAE on both conditions
+  without alignment/padding.
 
-- **PDB 4BCI duplicate chain IDs:** 4BCI stores protein and HETATM records
-  for chain A and B, giving four chains total (A, B, A, B).  PDBFixer
-  exposes this as duplicate IDs.  `inputs/01_download_and_clean.py` handles
-  this with index-based chain removal — do not revert to name-based removal.
+- **`@action` on overridden methods:** If you override any `@action`-decorated
+  method from a deepdrivewe base class, keep the `@action` decorator — the
+  Academy framework won't register it otherwise.
 
 ---
 
-## How this example was developed
+## 10. How this example was developed (agentic workflow)
 
-This example was built using **Claude Code** (claude-sonnet-4-6) as an agentic
-coding assistant, following an iterative workflow:
+This example was built using **Claude Code** (claude-sonnet-4-6) as an
+agentic coding assistant.  The development process is captured here so
+future AI-assisted sessions can start with full context rather than
+re-deriving it.
 
-1. **System context first** — the AI was given the biological question, PDB ID,
-   and pcoord choices before any code was written.
-2. **Read before write** — the AI read the deepdrivewe source classes
-   (`ContactMapRMSDReporter`, `Recycler`, `OrchestratorAgent`, etc.) before
+### What was done
+
+1. **System context first** — biological question, PDB ID, pcoord design, and
+   structural decisions were established before any code was written.
+2. **Read before write** — the AI read deepdrivewe source classes
+   (`ContactMapRMSDReporter`, `Recycler`, `SimulationAgent`, etc.) before
    subclassing them.
-3. **Incremental commits** — each logical change was committed separately
-   with descriptive messages, making the branch history self-explanatory.
-4. **CLAUDE.md as living documentation** — this file was written as part of
-   the implementation, not as an afterthought, so future AI sessions have
-   full context from the start.
+3. **Self-contained example** — all CDK9-specific code lives in this directory;
+   nothing was added to deepdrivewe's core package.
+4. **CLAUDE.md written as part of the implementation** — not as an afterthought,
+   so future AI sessions have full context from the start.
 
-**Agentic development workflow for this codebase:**
+### Recommended startup prompt for future sessions
+
+> "I'm working on the CDK9/CyclinT1 Phase 1 WE example at
+> `examples/openmm_cdk9_cyclinT1/` in the deepdrivewe repo
+> (`feature/academy-agents` branch).  Read `CLAUDE.md` in that directory
+> first, then `simulate.py` and `main.py`, before making any changes.
+> The task is: [your task here]."
+
+### Session workflow
 
 ```
 Session start:
-  → AI reads CLAUDE.md (this file) + repo CLAUDE.md
-  → AI reads simulate.py + main.py
-  → AI plans changes with the developer
+  → AI reads CLAUDE.md (this file)
+  → AI reads simulate.py and main.py
+  → AI plans changes with the developer before writing code
 
 Implementation:
-  → Small, focused edits (not large rewrites)
-  → Test with inputs/04_verify_pcoord_residues.py after structure changes
-  → Commit each logical unit
+  → Small, focused edits — not large rewrites
+  → Test with 04_verify_pcoord_residues.py after any structural changes
+  → Commit each logical unit with a descriptive message
 
 Session end:
   → Update CLAUDE.md if new decisions were made
-  → Commit with descriptive message so history is self-explanatory
+  → Update ROADMAP.md if phase status changed
+  → Commit so history is self-explanatory for the next session
 ```
