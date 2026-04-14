@@ -17,14 +17,8 @@ cd examples/openmm_cdk9_cyclinT1/inputs
 
 python 01_download_and_clean.py          # ~1 min  — downloads PDB 4BCI, extracts apo/holo
 python 02_check_mutations.py             # optional — reports CyclinT1 mutation distances
-python 03_equilibrate.py                 # ~3–5 h CPU; submit via HPC script for GPU
+python 03_equilibrate.py                 # ~3–5 h CPU; ~20–40 min with CUDA GPU
 python 04_verify_pcoord_residues.py      # verify Glu66/Lys48 residue numbering
-```
-
-On HPC, submit from `examples/openmm_cdk9_cyclinT1/`:
-
-```bash
-sbatch scripts/hpc_equilibrate.sl
 ```
 
 ## Step 2 — Run the weighted ensemble
@@ -35,13 +29,6 @@ export OPENMM_CPU_THREADS=1    # CPU only; remove this line for GPU
 
 python main.py --config config_apo.yaml
 python main.py --config config_holo_cyclinT1.yaml
-```
-
-On HPC:
-
-```bash
-sbatch scripts/hpc_we_apo.sl
-sbatch scripts/hpc_we_holo.sl
 ```
 
 ## Step 3 — Resume from checkpoint
@@ -97,6 +84,25 @@ runs/cdk9-apo/
         ├── seg.log          Energy / temperature
         └── config.yaml      Simulation parameters
 ```
+
+---
+
+## Running on an HPC cluster (optional)
+
+The example runs with `python main.py` on any machine with OpenMM installed.
+The `scripts/` directory contains Slurm job scripts as a **starting-point
+template** for HPC submission — they are not required and will not work
+without cluster-specific edits.
+
+Before submitting any script you must:
+
+1. Add your environment activation (e.g. `conda activate myenv` or
+   `source .venv/bin/activate`) in the `# Environment setup` section
+2. Uncomment and set `#SBATCH --gres=gpu:N` and `--partition` to match
+   your cluster's GPU resource syntax
+3. Set `num_workers` in the relevant YAML config to match the GPU count
+
+See `scripts/README.md` for the full checklist.
 
 ---
 
