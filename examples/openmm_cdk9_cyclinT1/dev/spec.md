@@ -1,5 +1,27 @@
 # Technical Specification
 
+## Framework status
+
+> **Read before making architectural changes.**
+
+This example is built on the `feature/academy-agents` branch of deepdrivewe,
+which is a proof-of-concept integration of the Academy agent framework.  A new
+deepdrivewe release is being prepared (as of April 2026) that **removes the
+Colmena implementation and adopts Academy as the primary framework**.
+
+Implications:
+- The CDK9 example will need to be rebased onto the new release once it drops.
+  Import paths and base class APIs may change.
+- Confirm with the deepdrivewe developers before making significant
+  architectural additions to the current branch.
+- The subclassing approach used here (CDK9PcoordReporter, CDK9SimulationAgent,
+  etc.) should be largely compatible with the new release, but verify.
+- This example is intended to serve as a reference implementation for the
+  Academy-native deepdrivewe — its structure and documentation conventions
+  are designed with that in mind.
+
+---
+
 ## Architecture baseline
 
 Built on deepdrivewe + Academy agents, following the NTL9 Academy example
@@ -89,6 +111,38 @@ and unused in Phase 1 but essential for Phase 2 CVAE warm-start, avoiding
 the need to re-run trajectories.  Note that apo and holo produce different
 contact map sizes (321 vs. 573 residues) — do not train a single CVAE on
 both without alignment or padding.
+
+## Agentic HPC deployment
+
+Academy has explicit support for HPC job dispatch via the **Globus connector**.
+This is the supported agentic pathway for sites that have Globus compute
+endpoints — an Academy agent can submit, monitor, and retrieve jobs without
+manual SSH intervention.  This example does not currently wire up the Globus
+connector; the WE workflow is launched with `python main.py` and the `scripts/`
+directory provides manual Slurm templates for direct submission.
+
+A future extension could replace the manual submission path with an
+Academy-native `GlobusComputeAgent` wrapping the equilibration and WE runs,
+making the full pipeline end-to-end agentic for sites with Globus support.
+
+## Inputs pipeline outside Academy
+
+The four `inputs/` scripts (`01_download_and_clean.py` through
+`04_verify_pcoord_residues.py`) run as plain Python outside any Academy agent.
+This is the current gap between the fully agentic vision and the Phase 1
+implementation.
+
+A natural future generalization is to wrap these as Academy agents:
+- A `StructurePrepAgent` handling download, cleaning, and mutation checks
+- An `EquilibrationAgent` wrapping `03_equilibrate.py` and emitting validated
+  basis states
+- A `ValidationAgent` running `04_verify_pcoord_residues.py` and gating
+  downstream work
+
+This would make the full pipeline — structure preparation, equilibration, and
+WE sampling — orchestratable end-to-end through Academy, including via the
+Globus connector for HPC sites.  Capturing this now so it is not lost as a
+design direction.
 
 ## Decision log
 

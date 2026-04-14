@@ -22,6 +22,14 @@ It is built on the **deepdrivewe + Academy agents** framework and follows the
 same pattern as `examples/openmm_ntl9_hk_academy/`, extended with a 2D
 geometric progress coordinate tailored to CDK9 biology.
 
+> **Framework status (April 2026):** The `feature/academy-agents` branch is a
+> proof-of-concept.  A new deepdrivewe release is being prepared that removes
+> Colmena and adopts Academy as the primary framework.  **Confirm with the
+> deepdrivewe developers before making significant architectural additions to
+> this branch.**  A rebase onto the new release will be needed; the CDK9
+> subclassing approach should be largely compatible but import paths may change.
+> See `dev/spec.md` for full context.
+
 **Key documents for this session:**
 - `dev/intent.md` — scientific goals and biological motivation
 - `dev/spec.md` — technical design decisions and decision log

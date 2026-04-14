@@ -1,5 +1,24 @@
 # Quickstart
 
+## Compute expectations
+
+The example has two distinct runtime profiles:
+
+| Stage | Local CPU | GPU (CUDA) | Notes |
+|-------|-----------|------------|-------|
+| `01_download_and_clean.py` | ~1 min | — | Downloads PDB 4BCI |
+| `02_check_mutations.py` | ~1 min | — | Optional; informational only |
+| `03_equilibrate.py` | **3–5 h** | ~20–40 min | Both conditions; long-running |
+| `04_verify_pcoord_residues.py` | ~1 min | — | Must pass before WE run |
+| WE run (100 iter, 4 workers) | Not practical | Hours–days | Designed for multi-GPU |
+
+**`03_equilibrate.py` is the critical long-running step.** Plan accordingly —
+run it on a GPU workstation or overnight on CPU.  The WE workflow is designed
+for multi-GPU execution; CPU-only runs are useful for smoke-testing the
+pipeline (2 iterations, 1 ps segments) but not for production sampling.
+
+---
+
 ## Prerequisites
 
 ```bash
@@ -15,10 +34,27 @@ pip install -e .
 ```bash
 cd examples/openmm_cdk9_cyclinT1/inputs
 
-python 01_download_and_clean.py          # ~1 min  — downloads PDB 4BCI, extracts apo/holo
-python 02_check_mutations.py             # optional — reports CyclinT1 mutation distances
-python 03_equilibrate.py                 # ~3–5 h CPU; ~20–40 min with CUDA GPU
-python 04_verify_pcoord_residues.py      # verify Glu66/Lys48 residue numbering
+python 01_download_and_clean.py     # ~1 min — downloads PDB 4BCI, extracts apo/holo PDBs
+python 02_check_mutations.py        # optional — reports CyclinT1 mutation distances
+python 03_equilibrate.py            # 3–5 h CPU or ~30 min GPU — plan accordingly
+```
+
+Before proceeding, verify the equilibrated structures are usable:
+
+```bash
+python 04_verify_pcoord_residues.py
+```
+
+This script checks that Glu66 and Lys48 are present with the expected atom
+names in both prepared structures.  **Do not proceed to Step 2 if this fails**
+— a residue numbering shift from PDBFixer will silently produce wrong pcoord
+values throughout the WE run.
+
+Expected output of a passing check:
+```
+apo:  Glu66 CD found at index N  |  Lys48 NZ found at index M
+holo: Glu66 CD found at index N  |  Lys48 NZ found at index M
+All checks passed.
 ```
 
 ## Step 2 — Run the weighted ensemble
