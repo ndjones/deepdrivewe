@@ -22,7 +22,11 @@ It is built on the **deepdrivewe + Academy agents** framework and follows the
 same pattern as `examples/openmm_ntl9_hk_academy/`, extended with a 2D
 geometric progress coordinate tailored to CDK9 biology.
 
-See `ROADMAP.md` in this directory for the full phased plan.
+**Key documents for this session:**
+- `dev/intent.md` — scientific goals and biological motivation
+- `dev/spec.md` — technical design decisions and decision log
+- `dev/phases/phase1.md` — Phase 1 plan and status (code complete)
+- `docs/quickstart.md` — how to run the example
 
 ---
 
@@ -184,28 +188,36 @@ be replaced/extended without touching deepdrivewe.
 
 ```
 examples/openmm_cdk9_cyclinT1/
-├── CLAUDE.md                      ← This file (AI assistant guide)
-├── README.md                      ← Human-readable overview and quickstart
-├── ROADMAP.md                     ← Full phased plan, decisions, open questions
-├── main.py                        ← Entry point; wires Academy agents
-├── simulate.py                    ← CDK9PcoordReporter + CDK9SimulationAgent
-├── recyclers.py                   ← BoundaryRecycler
-├── binners.py                     ← Rectilinear2DBinner (2D uniform grid)
-├── orchestrator.py                ← CDK9OrchestratorAgent
-├── config_apo.yaml                ← Full config for apo condition
-├── config_holo_cyclinT1.yaml      ← Full config for holo condition
+├── CLAUDE.md                        ← This file (AI assistant guide)
+├── README.md                        ← Broad overview and navigation
+├── docs/
+│   └── quickstart.md                ← How to run: prereqs, steps, config, outputs
+├── dev/
+│   ├── intent.md                    ← Scientific goals and biological motivation
+│   ├── spec.md                      ← Technical design decisions and decision log
+│   └── phases/
+│       ├── phase1.md                ← Phase 1 plan and deliverables (complete)
+│       ├── phase2.md                ← Phase 2 plan: CVAE latent pcoord (planned)
+│       └── phase3.md                ← Phase 3 plan: comparative orchestration (planned)
+├── main.py                          ← Entry point; wires Academy agents
+├── simulate.py                      ← CDK9PcoordReporter + CDK9SimulationAgent
+├── recyclers.py                     ← BoundaryRecycler
+├── binners.py                       ← Rectilinear2DBinner (2D uniform grid)
+├── orchestrator.py                  ← CDK9OrchestratorAgent
+├── config_apo.yaml                  ← Full config for apo condition
+├── config_holo_cyclinT1.yaml        ← Full config for holo condition
 ├── inputs/
-│   ├── README.md                  ← Pipeline docs + structural decisions table
-│   ├── 01_download_and_clean.py   ← Download 4BCI, prepare apo/holo PDBs
-│   ├── 02_check_mutations.py      ← CyclinT1 mutation proximity analysis
-│   ├── 03_equilibrate.py          ← Minimise + 2 ns NVT + save basis states
+│   ├── README.md                    ← Pipeline docs + structural decisions table
+│   ├── 01_download_and_clean.py     ← Download 4BCI, prepare apo/holo PDBs
+│   ├── 02_check_mutations.py        ← CyclinT1 mutation proximity analysis
+│   ├── 03_equilibrate.py            ← Minimise + 2 ns NVT + save basis states
 │   ├── 04_verify_pcoord_residues.py ← Verify Glu66/Lys48 numbering
 │   └── .gitignore
 └── scripts/
-    ├── README.md                  ← HPC submission guide
-    ├── hpc_equilibrate.sl         ← Slurm: structure equilibration
-    ├── hpc_we_apo.sl              ← Slurm: CDK9 apo WE run
-    └── hpc_we_holo.sl             ← Slurm: holo WE run
+    ├── README.md                    ← HPC submission guide
+    ├── hpc_equilibrate.sl           ← Slurm: structure equilibration
+    ├── hpc_we_apo.sl                ← Slurm: CDK9 apo WE run
+    └── hpc_we_holo.sl               ← Slurm: holo WE run
 ```
 
 ---
@@ -332,10 +344,11 @@ re-deriving it.
 
 ### Recommended startup prompt for future sessions
 
-> "I'm working on the CDK9/CyclinT1 Phase 1 WE example at
+> "I'm working on the CDK9/CyclinT1 WE example at
 > `examples/openmm_cdk9_cyclinT1/` in the deepdrivewe repo
 > (`feature/academy-agents` branch).  Read `CLAUDE.md` in that directory
-> first, then `simulate.py` and `main.py`, before making any changes.
+> first, then `dev/intent.md`, `dev/spec.md`, and the relevant
+> `dev/phases/` file before making any changes.
 > The task is: [your task here]."
 
 ### Session workflow
